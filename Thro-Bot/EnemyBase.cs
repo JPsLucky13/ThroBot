@@ -170,6 +170,8 @@ namespace Thro_Bot
         /// </summary>
         public Vector2 m_Center;
 
+		protected float m_Opacity = 1f;
+
         /// <summary>
         /// Movement speed of this enemy (units per step).
         /// </summary>
@@ -237,7 +239,7 @@ namespace Thro_Bot
             m_Texture = texture;
             m_Rect = new Rectangle(0, 0, m_Texture.Width, m_Texture.Height);
             m_Origin = Vector2.Zero;
-            m_Center = new Vector2(m_Texture.Width / 2, m_Texture.Height / 2);
+            m_Center = new Vector2((float)m_Texture.Width / 2f, (float)m_Texture.Height / 2f);
 
             // Init movement/rotation behaviors
             InitializeBehaviors();
@@ -264,7 +266,7 @@ namespace Thro_Bot
 
         public virtual void Draw(SpriteBatch spriteBatch)
         {
-            spriteBatch.Draw(m_Texture, m_Position, m_Rect, m_Color, m_Rotation, m_Origin, m_Scale, SpriteEffects.None, 0f);
+            spriteBatch.Draw(m_Texture, m_Position, m_Rect, m_Color * m_Opacity, m_Rotation, m_Origin, m_Scale, SpriteEffects.None, 0f);
         }
 
         public void Kill()
@@ -274,5 +276,9 @@ namespace Thro_Bot
 
             m_Active = false;
         }
+
+		public virtual void SetOpacity (float opacity) {
+			m_Opacity = opacity;
+		}
     }
 }

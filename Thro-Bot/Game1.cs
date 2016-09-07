@@ -21,6 +21,9 @@ namespace Thro_Bot
         //Represents the player
         Player player;
 
+        //Represents the GameScene
+        GameScene currentGameScene;
+
         //represents the projectile
         Projectile projectile;
         Vector2 projectilePosition;
@@ -86,6 +89,7 @@ namespace Thro_Bot
         ParticleSystemBase bouncePS;
 		ParticleSystemBase pickupHealthPS;
 		ParticleSystemBase pickupSpawnPS;
+		ParticleSystemBase bossHurtPS;
         List<ParticleSystemBase> activeParticleSystems;
 
         // Random
@@ -148,6 +152,12 @@ namespace Thro_Bot
         private bool bossAnimationStarted = false;
         private BossCore bossCore;
         private Lazer lazer;
+		SoundEffect bossIdleSnd;
+		SoundEffect laserChargeSnd;
+		SoundEffect laserShootSnd;
+		SoundEffectInstance bossIdleLoop;
+		SoundEffectInstance laserCharge;
+		SoundEffectInstance laserShootLoop;
         private Texture2D bossCoreTexture;
         private Texture2D lazerTexture;
         private TimeSpan currentCoreTime = TimeSpan.Zero;
@@ -182,6 +192,7 @@ namespace Thro_Bot
             ringLinePosition = new Vector2(GraphicsDevice.Viewport.TitleSafeArea.X + (GraphicsDevice.Viewport.Width * 0.5f), GraphicsDevice.Viewport.TitleSafeArea.Y + (GraphicsDevice.Viewport.Height * 0.92f));
             enemiesList = new List<EnemyBase>();
             powerUpsList = new List<PowerUp>();
+            currentGameScene = new GameScene();
 
             enemyDeathPS = new ParticleSystemBase(0f, 1f, 4,
                 0.5f, 1.5f,
@@ -207,11 +218,18 @@ namespace Thro_Bot
 				new Vector2 (-4f, -4f), new Vector2 (4f, 4f),
 				0f, 0f, true, false);
 
+			bossHurtPS = new ParticleSystemBase (0f, 1f, 8,
+				0.6f, 1.2f,
+				0.06f, 0.4f,
+				new Vector2 (-3f, -3f), new Vector2 (3f, 3f),
+				0.03f, 0.12f);
+
             activeParticleSystems = new List<ParticleSystemBase>() {
                 enemyDeathPS,
                 bouncePS,
 				pickupHealthPS,
-				pickupSpawnPS
+				pickupSpawnPS,
+				bossHurtPS
             };
 
 
@@ -263,7 +281,7 @@ namespace Thro_Bot
             ringLineTexture = Content.Load<Texture2D>("Graphics/Ring_Line");
             ringLineOrigin = new Vector2(ringLineTexture.Width / 2, ringLineTexture.Height / 2);
             ringLineRectangle = new Rectangle(0, 0, ringLineTexture.Width, ringLineTexture.Height);
-
+            
             // Load edge textures
             edge_normal = Content.Load<Texture2D>("Graphics/Edge_normal");
             edge_hit = Content.Load<Texture2D>("Graphics/Edge_Hit");
@@ -339,6 +357,25 @@ namespace Thro_Bot
             bossShieldTexture = Content.Load<Texture2D>("Graphics/Boss_Shield");
             bossCoreTexture = Content.Load<Texture2D>("Graphics/Boss_core");
             lazerTexture = Content.Load<Texture2D>("Graphics/Lazer");
+
+            //Load the GameScene textures
+            Vector2 playButtonPosition = new Vector2(GraphicsDevice.Viewport.TitleSafeArea.X + (GraphicsDevice.Viewport.Width * 0.5f), GraphicsDevice.Viewport.TitleSafeArea.Y + (GraphicsDevice.Viewport.Height * 0.3f));
+            Vector2 credistButtonPosition = new Vector2(GraphicsDevice.Viewport.TitleSafeArea.X + (GraphicsDevice.Viewport.Width * 0.5f), GraphicsDevice.Viewport.TitleSafeArea.Y + (GraphicsDevice.Viewport.Height * 0.6f));
+            Vector2 quitButtonPosition = new Vector2(GraphicsDevice.Viewport.TitleSafeArea.X + (GraphicsDevice.Viewport.Width * 0.5f), GraphicsDevice.Viewport.TitleSafeArea.Y + (GraphicsDevice.Viewport.Height * 0.9f));
+            Vector2 backButtonPosition = new Vector2(GraphicsDevice.Viewport.TitleSafeArea.X + (GraphicsDevice.Viewport.Width * 0.5f), GraphicsDevice.Viewport.TitleSafeArea.Y + (GraphicsDevice.Viewport.Height * 0.9f));
+            Vector2 mainMenuBackgroundPosition = new Vector2(GraphicsDevice.Viewport.Width * 0.5f, GraphicsDevice.Viewport.Height * 0.5f);
+            currentGameScene.InitializeButtons();
+            currentGameScene.m_PlayButton.InitializeButton(Content.Load<Texture2D>("Graphics/Play"), playButtonPosition);
+            currentGameScene.m_CreditsButton.InitializeButton(Content.Load<Texture2D>("Graphics/Credits"), credistButtonPosition);
+            currentGameScene.m_QuitButton.InitializeButton(Content.Load<Texture2D>("Graphics/Quit"), quitButtonPosition);
+            currentGameScene.m_BackButton.InitializeButton(Content.Load<Texture2D>("Graphics/Back"), backButtonPosition);
+            currentGameScene.m_MouseTexture = Content.Load<Texture2D>("Graphics/Cursor");
+            currentGameScene.InitializeBackground(Content.Load<Texture2D>("Graphics/MainMenuBackground"), mainMenuBackgroundPosition);
+            currentGameScene.m_CreditsFont = Content.Load<SpriteFont>("Fonts/Score");
+
+            bossIdleSnd = Content.Load<SoundEffect>("Sounds/BossIdle");
+            laserChargeSnd = Content.Load<SoundEffect>("Sounds/LaserCharge");
+            laserShootSnd = Content.Load<SoundEffect>("Sounds/LaserShootLoop");
         }
 
         /// <summary>
@@ -357,71 +394,85 @@ namespace Thro_Bot
         /// <param name="gameTime">Provides a snapshot of timing values.</param>
         protected override void Update(GameTime gameTime)
         {
-            if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
-                Exit();
-            // Save the previous state of the keyboard 
-            previousKeyboardState = currentKeyboardState;
+            currentGameScene.Update();
 
-            //Read the current state
-            currentKeyboardState = Keyboard.GetState();
-            if (!gamePaused)
+            //Check the gamescene state
+            if (currentGameScene.CurrentGameState == GameScene.GameState.Playing)
             {
-                // Spawn Boss
-                if (gameTime.TotalGameTime - lastBossTime > bossSpawnDelay)
+
+                // Save the previous state of the keyboard 
+                previousKeyboardState = currentKeyboardState;
+
+                //Read the current state
+                currentKeyboardState = Keyboard.GetState();
+                if (!gamePaused)
                 {
-                    if (enemiesList.Count == 0)
+                    // Spawn Boss
+                    if (gameTime.TotalGameTime - lastBossTime > bossSpawnDelay)
                     {
-                        lastBossTime = gameTime.TotalGameTime;
-                        SpawnBoss(gameTime);
-                        previousBossAnimationTime = gameTime.TotalGameTime;
+                        if (enemiesList.Count == 0)
+                        {
+                            lastBossTime = gameTime.TotalGameTime;
+                            SpawnBoss(gameTime);
+                            previousBossAnimationTime = gameTime.TotalGameTime;
+                        }
+                    } // Update Boss if spawned
+                    else
+                    if (bossIsSpawned)
+                    {
+                        UpdateBoss(gameTime);
                     }
-                } // Update Boss if spawned
-                else
-                if (bossIsSpawned)
-                {
-                    UpdateBoss(gameTime);
+                    else
+                    {
+                        // Spawn enemies
+                        SpawnEnemies(gameTime);
+                    }
+                    //Spawn a power up
+                    SpawnPowerUps(gameTime);
                 }
-                else
+                //Update the player
+                UpdatePlayer(gameTime);
+                if (!gamePaused)
                 {
-                    // Spawn enemies
-                    SpawnEnemies(gameTime);
+                    //Update the projectile
+                    UpdateProjectile(gameTime);
+
+                    // Update enemy
+                    if (!bossIsSpawned)
+                    {
+                        UpdateEnemies(gameTime);
+                    }
+                    //Update powerUps
+                    UpdatePowerUps(gameTime);
                 }
-                //Spawn a power up
-                SpawnPowerUps(gameTime);
-            }
-            //Update the player
-            UpdatePlayer(gameTime);
-            if (!gamePaused)
+                //Update the UI
+                ui.Update(gameTime);
+
+                //Update the combo
+                UpdateCombo(gameTime);
+
+                // Update all particle systems
+                UpdateParticleSystems();
+
+                UpdateDamageFlash(gameTime);
+
+
+                if (player.finishedAnimation)
+                {
+
+                    if (!gameOver)
+                        playerDeath.Play();
+
+                    //Freeze the game
+                    gameOver = true;
+                    gamePaused = true;
+                }
+            }//end of current gamescene check for playing state
+
+
+            if (currentGameScene.CurrentGameState == GameScene.GameState.Quit)
             {
-                //Update the projectile
-                UpdateProjectile(gameTime);
-
-                // Update enemy
-                if (!bossIsSpawned)
-                {
-                    UpdateEnemies(gameTime);
-                }
-                //Update powerUps
-                UpdatePowerUps(gameTime);
-            }
-            //Update the UI
-            ui.Update(gameTime);
-
-            //Update the combo
-            UpdateCombo(gameTime);
-
-            // Update all particle systems
-            UpdateParticleSystems();
-
-            UpdateDamageFlash(gameTime);
-
-
-            if (player.finishedAnimation)
-            {
-
-                //Freeze the game
-                gameOver = true;
-                gamePaused = true;
+                QuitGame();
             }
 
             base.Update(gameTime);
@@ -448,6 +499,7 @@ namespace Thro_Bot
                 // If boss is killed, clear the list
                 if (!enemiesList[0].m_Active)
                 {
+					bossIdleLoop.Pause();
                     enemiesList.Clear();
                     lastBossTime = gameTime.TotalGameTime;
                 }
@@ -456,6 +508,14 @@ namespace Thro_Bot
             {
                 // Lerp opacity towards 1
                 bossCore.SetOpacity(bossCore.GetOpactity() + 1f / 60f);
+				if (laserCharge == null) {
+					laserCharge = laserChargeSnd.CreateInstance();
+
+				}
+				if (laserCharge.State != SoundState.Playing) {
+					laserCharge.Play();
+					boss.SetOpacity (0.5f);
+				}
             }
             else
             {
@@ -463,7 +523,14 @@ namespace Thro_Bot
                 if (null == lazer)
                 {
                     lazer = new Lazer();
-                    lazer.Initialize(lazerTexture, new Vector2(boss.m_Position.X - lazerTexture.Width / 2, boss.m_Position.Y + 30f));
+					lazer.Initialize(lazerTexture, new Vector2(boss.m_Position.X - lazerTexture.Width / 2, boss.m_Position.Y + 30f));
+					if (laserShootLoop == null) {
+						laserShootLoop = laserShootSnd.CreateInstance();
+						laserShootLoop.IsLooped = true;
+					}
+					laserCharge.Stop();
+					laserShootLoop.Play();
+					playerHurtSnd.Play(1f, random.RandomFloat(-0.1f, 0.1f), 0f);
                 }
                 else
                 {
@@ -471,20 +538,25 @@ namespace Thro_Bot
                     if (currentCoreTime < coreAnimationTime)
                     {
                         player.m_iHealth -= 0.5f;
-                        playerHurtSnd.Play(1f, random.RandomFloat(-0.1f, 0.1f), 0f);
+                        
                         flashDamage = true;
                         ui.glitchScreen = true;
                         //Cap the maximum health to lose
                         if (player.m_iHealth >= 0f)
                         {
-                            ui.playerHealth = (int)player.m_iHealth;
+                            ui.playerHealth = (int)player.m_iHealth%10 == 0 ? (int)player.m_iHealth : (int)player.m_iHealth - (int)player.m_iHealth % 10;
+                           
+
+
                         }
                     }
                     else
                     {
+						boss.SetOpacity (1f);
                         // Stop animation and reset boss state
                         currentCoreTime = TimeSpan.Zero;
-                        bossAnimationStarted = false;                        
+                        bossAnimationStarted = false;     
+						laserShootLoop.Pause();                   
                     }
                 }
             }
@@ -509,6 +581,8 @@ namespace Thro_Bot
                     previousBossCollision = gameTime.TotalGameTime;
                     if (enemy.m_Type == EnemyBase.Type.Boss)
                     {
+						ShowEnemyDeath (enemy);
+						discHitEnemySnd.Play (1f, random.RandomFloat (-0.1f, 0.1f), 0f);
                         ((Boss)enemy).Health -= 10;
                         ((Boss)enemy).SetColor(Color.White);
                         activeParticleSystems.Remove(projectile.m_Trail);
@@ -529,6 +603,10 @@ namespace Thro_Bot
                     }
                     else
                     {
+						// boss shield?
+						ShowBounce (projectile.m_Position + projectile.m_ProjectileOrigin, enemy.m_Color);
+						discHitShieldSnd.Play (1f, random.RandomFloat (-0.1f, 0.1f), 0f);
+
                         if (Math.Abs((previousProjectilePosition.X - projectile.m_Position.X)) > Math.Abs((previousProjectilePosition.Y - projectile.m_Position.Y)))
                         {
                             projectile.m_fProjectileSpeedX = -projectile.m_fProjectileSpeedX;
@@ -583,6 +661,13 @@ namespace Thro_Bot
             enemiesList.Add(boss);
             bossIsSpawned = true;
             previousBossAnimationTime = gameTime.TotalGameTime;
+			if (bossIdleLoop == null) {
+				bossIdleLoop = bossIdleSnd.CreateInstance();
+				bossIdleLoop.IsLooped = true;
+				bossIdleLoop.Volume = 0.5f;
+			}
+
+			bossIdleLoop.Play();
         }
 
         private void UpdateEnemies(GameTime gameTime)
@@ -595,7 +680,7 @@ namespace Thro_Bot
                     enemy.Update(gameTime);
                     if (CheckCollisionWithProjectile(enemy, gameTime))
                     {
-                        ShowBounce(projectile.m_Position, enemy.m_Color);
+                        ShowBounce(projectile.m_Position + projectile.m_ProjectileOrigin, enemy.m_Color);
 
                         if (enemy.GetType() != typeof(Shield))
                         {
@@ -677,7 +762,7 @@ namespace Thro_Bot
                             //Cap the maximum health to lose
                             if (player.m_iHealth >= 0f)
                             {
-                                ui.playerHealth = player.m_iHealth;
+                                ui.playerHealth = (int)player.m_iHealth % 10 == 0 ? (int)player.m_iHealth : (int)player.m_iHealth - (int)player.m_iHealth % 10;
                             }
 
                             //Glitch the screen
@@ -842,7 +927,7 @@ namespace Thro_Bot
                     powerUp.Initialize(powerUpTextures[0], new Vector2(random.Next(powerUpTextures[0].Width, WIDTH - powerUpTextures[0].Width), random.Next(200, HEIGHT - 200)));
                     currentPowerUpTime = gameTime.TotalGameTime;
                     powerUpsList.Add(powerUp);
-                    ShowPickupSpawn(powerUp.m_Position);
+                    ShowPickupSpawn(powerUp.m_Position + powerUp.m_Origin);
                 }
                 else
                 {
@@ -856,7 +941,7 @@ namespace Thro_Bot
                         powerUp.Initialize(powerUpTextures[0], powerUpPos);
                         currentPowerUpTime = gameTime.TotalGameTime;
                         powerUpsList.Add(powerUp);
-                        ShowPickupSpawn(powerUp.m_Position);
+                        ShowPickupSpawn(powerUp.m_Position + powerUp.m_Origin);
                     }
                 }
             }
@@ -885,10 +970,10 @@ namespace Thro_Bot
                         }
 
                     }
-                    ui.playerHealth = (int)player.m_iHealth;
+                    ui.playerHealth = (int)player.m_iHealth % 10 == 0 ? (int)player.m_iHealth : (int)player.m_iHealth - (int)player.m_iHealth % 10;
                     powerUpsList[i].m_Active = false;
 					pickupHealthSnd.Play(1f, random.RandomFloat(-0.1f, 0.1f), 0f);
-					ShowPickupHealth (powerUpsList[i].m_Position);
+					ShowPickupHealth (powerUpsList[i].m_Position + powerUpsList[i].m_Origin);
                 }
 
                 if (!powerUpsList[i].m_Active)
@@ -942,13 +1027,13 @@ namespace Thro_Bot
             {
                 if (currentKeyboardState.IsKeyDown(Keys.N))
                 {
-                    Exit();
+                    currentGameScene.CurrentGameState = GameScene.GameState.MainMenu;
+                    ResetGame(gameTime);
                 }
                 else if (currentKeyboardState.IsKeyDown(Keys.Y))
                 {
 
                     ResetGame(gameTime);
-                    gamePaused = false;
 
                 }
 
@@ -956,6 +1041,13 @@ namespace Thro_Bot
 
             }
         }
+
+
+        private void QuitGame() {
+
+            Exit();
+        }
+
 
         protected void UpdateProjectile(GameTime gameTime)
         {
@@ -974,14 +1066,14 @@ namespace Thro_Bot
                     wallBoundSnd.Play(0.8f, random.RandomFloat(-0.1f, 0.1f), 0f);
                     projectile.m_fProjectileSpeedX = -projectile.m_fProjectileSpeedX;
                     edge = edge_hit;
-                    ShowBounce(projectile.m_Position, projectile.selfRotate ? Color.Red : Color.White);
+                    ShowBounce(projectile.m_Position + projectile.m_ProjectileOrigin, projectile.selfRotate ? Color.Red : Color.White);
                 }
                 else if (projectile.m_Position.Y <= 10f || projectile.m_Position.Y >= GraphicsDevice.Viewport.TitleSafeArea.Height - 10f)
                 {
                     wallBoundSnd.Play(0.8f, random.RandomFloat(-0.1f, 0.1f), 0f);
                     projectile.m_fProjectileSpeedY = -projectile.m_fProjectileSpeedY;
                     edge = edge_hit;
-                    ShowBounce(projectile.m_Position, projectile.selfRotate ? Color.Red : Color.White);
+                    ShowBounce(projectile.m_Position + projectile.m_ProjectileOrigin, projectile.selfRotate ? Color.Red : Color.White);
                 }
                 else
                 {
@@ -1015,6 +1107,9 @@ namespace Thro_Bot
                     {
 
                         projectile.selfRotate = false;
+                        projectile.m_ProjectileTexture = projectileTexture;
+                        projectile.m_Trail.SetAllTint(Color.White);
+                        if (spinLoopInstance != null) spinLoopInstance.Pause();
                     }
 
                 }
@@ -1144,7 +1239,7 @@ namespace Thro_Bot
                         }
 
                         discHitEnemySnd.Play(1f, random.RandomFloat(-0.1f, 0.1f), 0f);
-                        ShowBounce(projectile.m_Position, enemy.m_Color);
+                        ShowBounce(projectile.m_Position + projectile.m_ProjectileOrigin, enemy.m_Color);
                     }
 
                 }
@@ -1186,86 +1281,94 @@ namespace Thro_Bot
             //Start drawing
             spriteBatch.Begin();
 
-
-            //Draw the background
-            Rectangle sourceRectangle = new Rectangle(0, 0, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
-            spriteBatch.Draw(backgroundTexture, sourceRectangle, Color.White);
-
-            // Draw ring line            
-            spriteBatch.Draw(ringLineTexture, ringLinePosition, ringLineRectangle, Color.White, 0f, ringLineOrigin, 0.5f, SpriteEffects.None, 0f);
-
-            // Draw edge
-            Rectangle edgeRectangle = new Rectangle(0, 0, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
-            spriteBatch.Draw(edge, edgeRectangle, Color.White);
-
-            //Draw the Player
-            player.Draw(spriteBatch);
-
-            //Draw the projectile
-            projectile.Draw(spriteBatch);
-
-            //Draw the power ups
-            DrawPowerUps(spriteBatch);
-
-            //Draw enemies
-            DrawEnemies(spriteBatch);
-            // Draw boss shield
-            if (bossIsSpawned)
+            //Draw the game scene if the state is playing
+            if (currentGameScene.CurrentGameState == GameScene.GameState.Playing)
             {
-                //bossShield.Draw(spriteBatch);
-                if (bossCore != null)
+
+                //Draw the background
+                Rectangle sourceRectangle = new Rectangle(0, 0, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+                spriteBatch.Draw(backgroundTexture, sourceRectangle, Color.White);
+
+                // Draw ring line            
+                spriteBatch.Draw(ringLineTexture, ringLinePosition, ringLineRectangle, Color.White, 0f, ringLineOrigin, 0.5f, SpriteEffects.None, 0f);
+
+                // Draw edge
+                Rectangle edgeRectangle = new Rectangle(0, 0, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height);
+                spriteBatch.Draw(edge, edgeRectangle, Color.White);
+
+                //Draw the Player
+                player.Draw(spriteBatch);
+
+                //Draw the projectile
+                projectile.Draw(spriteBatch);
+
+                //Draw the power ups
+                DrawPowerUps(spriteBatch);
+
+                //Draw enemies
+                DrawEnemies(spriteBatch);
+                // Draw boss shield
+                if (bossIsSpawned)
                 {
-                    bossCore.Draw(spriteBatch);
+                    //bossShield.Draw(spriteBatch);
+                    if (bossCore != null)
+                    {
+                        bossCore.Draw(spriteBatch);
+                    }
+                    if (lazer != null)
+                    {
+                        lazer.Draw(spriteBatch);
+                    }
                 }
-                if (lazer != null)
+                DrawParticleSystems(spriteBatch);
+
+                if (player.m_bComboActive && player.m_iComboMultiplier > 1)
                 {
-                    lazer.Draw(spriteBatch);
+                    //Draw the combo indicator
+                    spriteBatch.DrawString(ui.comboFont, "Combo: x" + player.m_iComboMultiplier.ToString(), new Vector2(250, 490), Color.White);
+
+                    //Draw the multiplier 
+                    spriteBatch.DrawString(ui.scoreFont, "x" + player.m_iComboMultiplier.ToString(), lastKilledEnemy.m_Position, Color.White);
                 }
-            }
-            DrawParticleSystems(spriteBatch);
 
-            if (player.m_bComboActive && player.m_iComboMultiplier > 1)
-            {
-                //Draw the combo indicator
-                spriteBatch.DrawString(ui.comboFont, "Combo: x" + player.m_iComboMultiplier.ToString(), new Vector2(250, 490), Color.White);
+                //Draw ui
+                ui.Draw(spriteBatch);
 
-                //Draw the multiplier 
-                spriteBatch.DrawString(ui.scoreFont, "x" + player.m_iComboMultiplier.ToString(), lastKilledEnemy.m_Position, Color.White);
-            }
-
-            //Draw ui
-            ui.Draw(spriteBatch);
-
-            //Draw the score
-            spriteBatch.DrawString(ui.scoreFont, ui.score.ToString(), new Vector2(78, 40), Color.White);
+                //Draw the score
+                spriteBatch.DrawString(ui.scoreFont, ui.score.ToString(), new Vector2(78, 40), Color.White);
 
 
 
 
-            //Draw the player health
-            spriteBatch.DrawString(ui.healthFont, ui.playerHealth.ToString() + "%", new Vector2(680, 35), Color.White);
+                //Draw the player health
+                spriteBatch.DrawString(ui.healthFont, (int)ui.playerHealth + "%", new Vector2(680, 35), Color.White);
 
-            //Draw the damage rectangle
-            Rectangle damageRectangle = new Rectangle(0, 0, playerDamageTexture.Width, playerDamageTexture.Height);
-            Vector2 origin = new Vector2(playerDamageTexture.Width / 2, playerDamageTexture.Height / 2);
-            Vector2 position = new Vector2(GraphicsDevice.Viewport.Width / 2, GraphicsDevice.Viewport.Height - 200);
+                //Draw the damage rectangle
+                Rectangle damageRectangle = new Rectangle(0, 0, playerDamageTexture.Width, playerDamageTexture.Height);
+                Vector2 origin = new Vector2(playerDamageTexture.Width / 2, playerDamageTexture.Height / 2);
+                Vector2 position = new Vector2(GraphicsDevice.Viewport.Width / 2, GraphicsDevice.Viewport.Height - 200);
 
-            //Draw the flash damage
-            if (flashDamage)
-            {
-                spriteBatch.Draw(playerDamageTexture, position, damageRectangle, Color.Red, 0f, origin, 1f, SpriteEffects.None, 0f);
-            }
+                //Draw the flash damage
+                if (flashDamage)
+                {
+                    spriteBatch.Draw(playerDamageTexture, position, damageRectangle, Color.Red, 0f, origin, 1f, SpriteEffects.None, 0f);
+                }
 
-            //Draw the game over screen
-            if (player.finishedAnimation)
-            {
+                //Draw the game over screen
+                if (player.finishedAnimation)
+                {
 
-                //Draw the combo indicator
-                spriteBatch.DrawString(ui.gameOverFont, "Replay Y/N?", new Vector2(GraphicsDevice.Viewport.Width / 2 - 200, GraphicsDevice.Viewport.Height / 2 - 20), Color.White);
-                player.m_bComboActive = false;
+                    //Draw the combo indicator
+                    spriteBatch.DrawString(ui.gameOverFont, "Replay Y/N?", new Vector2(GraphicsDevice.Viewport.Width / 2 - 200, GraphicsDevice.Viewport.Height / 2 - 20), Color.White);
+                    player.m_bComboActive = false;
+                    laserShootLoop.Pause();
+                   
+                }
 
-                //playerDeath.Play();
+            }//end of checking if playing
 
+            else {
+                currentGameScene.Draw(spriteBatch);
             }
 
             //Stop drawing
@@ -1318,9 +1421,22 @@ namespace Thro_Bot
                 (float)(projectile.m_fProjectileSpeedX * Math.Sin(projectile.m_fProjectileRotation_fixed)),
                 -(float)(projectile.m_fProjectileSpeedY * Math.Cos(projectile.m_fProjectileRotation_fixed))
             ) * 0.6f);
-            enemyDeathPS.m_Position = enemy.m_Position + enemy.m_Center;
+            enemyDeathPS.m_Position = enemy.m_Position + 
+				(enemy.m_Type == EnemyBase.Type.Boss ? Vector2.Zero : enemy.m_Center);
             enemyDeathPS.SetTint(enemy.m_Color);
             enemyDeathPS.Emit(8);
+
+            enemyDeathSnd.Play(0.8f, random.RandomFloat(-0.1f, 0.1f), 0f);
+        }
+
+		void ShowBossHurt(Vector2 pos)
+        {
+            if (bossHurtPS.m_Sprites == null)
+                bossHurtPS.m_Sprites = enemyPiecesList;
+
+            bossHurtPS.m_Position = pos;
+            enemyDeathPS.SetTint(boss.m_Color);
+            enemyDeathPS.Emit();
 
             enemyDeathSnd.Play(0.8f, random.RandomFloat(-0.1f, 0.1f), 0f);
         }

@@ -25,7 +25,7 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>4</ApplicationRevision>
+    <ApplicationRevision>6</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
@@ -77,11 +77,13 @@
     <Compile Include="BossShield.cs" />
     <Compile Include="EnemyBase.cs" />
     <Compile Include="Game1.cs" />
+    <Compile Include="GameScene.cs" />
     <Compile Include="HealthPowerUp.cs" />
     <Compile Include="HexagonEnemy.cs" />
     <Compile Include="Lazer.cs" />
     <Compile Include="LinearTriangleEnemy.cs" />
     <Compile Include="ListExtension.cs" />
+    <Compile Include="MenuButton.cs" />
     <Compile Include="Particle.cs" />
     <Compile Include="ParticleSystemBase.cs" />
     <Compile Include="Player.cs" />
